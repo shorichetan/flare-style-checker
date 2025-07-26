@@ -1,0 +1,10 @@
+Remove the files:
+
+Get-Item -Path .\build, .\dist, .\__pycache__ -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+Remove-Item -Force .\flare_mstp_gui.spec -ErrorAction SilentlyContinue
+
+Then execute:
+
+pyinstaller flare_mstp_gui.py --onefile `
+  --add-data "rules_engine.py;." `
+  --add-data "C:/Users/shori/AppData/Local/Programs/Python/Python313/Lib/site-packages/en_core_web_sm;en_core_web_sm"

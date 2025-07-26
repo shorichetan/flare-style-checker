@@ -120,3 +120,21 @@ Pull requests and ideas are welcome!
 ## License
 
 MIT License
+
+
+## Build Standalone Executable
+
+To build a standalone executable with PyInstaller, run the following commands in PowerShell:
+
+```powershell
+# Clean previous builds
+Get-Item -Path .\build, .\dist, .\__pycache__ -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+Remove-Item -Force .\flare_mstp_gui.spec -ErrorAction SilentlyContinue
+
+# Build the executable
+pyinstaller flare_mstp_gui.py --onefile `
+  --add-data "rules_engine.py;." `
+  --add-data "C:/Users/shori/AppData/Local/Programs/Python/Python313/Lib/site-packages/en_core_web_sm;en_core_web_sm"
+```
+
+This will generate a standalone executable in the `dist/` directory.

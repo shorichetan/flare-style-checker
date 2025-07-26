@@ -1,67 +1,13 @@
-# flare_mstp_gui.py
-
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from bs4 import BeautifulSoup
-import language_tool_python
-import spacy
+from tkinter import filedialog, messagebox
+from bs4 import BeautifulSoup, NavigableString
 import pandas as pd
-
-# Load NLP tools
-nlp = spacy.load("en_core_web_sm")
-tool = language_tool_python.LanguageTool('en-US')
+from rules_engine import apply_rules, to_sentence_case, set_custom_replacements
 
 # Globals
 custom_replacements = []
-violations = []
 INPUT_FOLDER = ""
-OUTPUT_FOLDER = "cleaned_output"
-
-# --- MSTP Rule Engine --- #
-
-def to_sentence_case(text):
-    if not text:
-        return text
-    return text[0].upper() + text[1:].lower()
-
-def apply_rules(text, rules):
-    global violations
-    original_text = text
-
-    if rules['grammar']:
-        text = tool.correct(text)
-
-    if rules['custom_terms']:
-        for old, new in custom_replacements:
-            if old in text:
-                violations.append(("Custom Term", old, new, original_text))
-                text = text.replace(old, new)
-
-    if rules['passive']:
-        doc = nlp(text)
-        for sent in doc.sents:
-            if any(tok.dep_ == "auxpass" for tok in sent):
-                violations.append(("Passive Voice", sent.text, "Use active voice", original_text))
-
-    if rules['future']:
-        if "will " in text:
-            violations.append(("Future Tense", "will", "Use present tense", original_text))
-            text = text.replace("will ", "")
-
-    if rules['ui']:
-        for term in ["OK", "Cancel", "Next", "Back", "Apply", "Save", "Close"]:
-            if term in text:
-                violations.append(("UI Term", term, f"<b>{term}</b>", original_text))
-                text = text.replace(term, f"<b>{term}</b>")
-
-    if rules['length']:
-        doc = nlp(text)
-        for sent in doc.sents:
-            if len(sent.text.split()) > 25:
-                violations.append(("Long Sentence", f"{len(sent.text.split())} words", "Shorten", sent.text))
-
-    return text
 
 # --- File Processing --- #
 
@@ -69,31 +15,53 @@ def process_file(filepath, rules):
     with open(filepath, 'r', encoding='utf-8') as f:
         html = f.read()
     soup = BeautifulSoup(html, 'html.parser')
+    changed = False
+
+    def review_change(tag, original, suggestion):
+        dialog = tk.Toplevel()
+        dialog.title("Review Suggestion")
+        tk.Label(dialog, text="Original:").pack(anchor="w")
+        tk.Message(dialog, text=original, width=500).pack()
+        tk.Label(dialog, text="Suggestion:").pack(anchor="w")
+        tk.Message(dialog, text=suggestion, width=500, fg="green").pack()
+        action = tk.StringVar(value="Reject")
+
+        def accept():
+            action.set("Accept")
+            dialog.destroy()
+
+        def reject():
+            action.set("Reject")
+            dialog.destroy()
+
+        tk.Button(dialog, text="Accept", command=accept).pack(side=tk.LEFT, padx=20, pady=10)
+        tk.Button(dialog, text="Reject", command=reject).pack(side=tk.RIGHT, padx=20, pady=10)
+        dialog.wait_window()
+        return action.get() == "Accept"
 
     for tag in soup.find_all(['p', 'li', 'td', 'th', 'span']):
         if tag.string and tag.string.strip():
-            corrected = apply_rules(tag.string, rules)
-            tag.string.replace_with(corrected)
+            corrected_text, suggestions = apply_rules(str(tag.string), rules)
+            for typ, orig, suggestion in suggestions:
+                if review_change(tag, orig, suggestion):
+                    tag.string.replace_with(suggestion)
+                    changed = True
 
     for heading in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
         if heading.string and rules['headings']:
             corrected = to_sentence_case(heading.string)
             if corrected != heading.string:
-                violations.append(("Heading Case", heading.string, corrected, corrected))
-                heading.string.replace_with(corrected)
+                if review_change(heading, heading.string, corrected):
+                    heading.string.replace_with(corrected)
+                    changed = True
 
-    rel_path = os.path.relpath(filepath, INPUT_FOLDER)
-    out_path = os.path.join(OUTPUT_FOLDER, rel_path)
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, 'w', encoding='utf-8') as f:
-        f.write(str(soup))
+    if changed:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(str(soup))
 
 # --- GUI --- #
 
 def start_scan():
-    global violations
-    violations = []
-
     rules = {
         'grammar': grammar_var.get(),
         'passive': passive_var.get(),
@@ -104,31 +72,26 @@ def start_scan():
         'custom_terms': custom_var.get(),
     }
 
+    set_custom_replacements(custom_replacements)
+
     for root, _, files in os.walk(INPUT_FOLDER):
         for file in files:
             if file.endswith(".htm") or file.endswith(".html"):
                 process_file(os.path.join(root, file), rules)
 
-    messagebox.showinfo("Done", f"Processed files saved to {OUTPUT_FOLDER}")
+    messagebox.showinfo("Done", f"Finished scanning and updating files in place.")
 
 def select_folder():
     global INPUT_FOLDER
     INPUT_FOLDER = filedialog.askdirectory()
     folder_label.config(text=INPUT_FOLDER)
 
-def export_log():
-    if not violations:
-        messagebox.showinfo("No Violations", "No style violations found.")
-        return
-    df = pd.DataFrame(violations, columns=["Type", "Issue", "Suggestion", "Original Text"])
-    df.to_csv("violations_log.csv", index=False)
-    messagebox.showinfo("Exported", "Violations log saved as violations_log.csv")
-
 def add_custom_term():
     old = custom_entry_old.get()
     new = custom_entry_new.get()
     if old and new:
         custom_replacements.append((old, new))
+        set_custom_replacements(custom_replacements)
         custom_listbox.insert(tk.END, f"{old} → {new}")
         custom_entry_old.delete(0, tk.END)
         custom_entry_new.delete(0, tk.END)
@@ -179,6 +142,5 @@ custom_listbox.pack(padx=20, pady=5, fill="x")
 action_frame = tk.Frame(root)
 action_frame.pack(pady=20)
 tk.Button(action_frame, text="Start Scan", command=start_scan).pack(side=tk.LEFT, padx=10)
-tk.Button(action_frame, text="Export Violations Log", command=export_log).pack(side=tk.LEFT, padx=10)
 
 root.mainloop()
