@@ -19,7 +19,8 @@
 
 ## GUI Preview
 
-> <img width="865" height="516" alt="image" src="https://github.com/user-attachments/assets/e96f931d-325b-478a-ada6-2ad7cda038eb" />
+> <img width="862" height="511" alt="image" src="https://github.com/user-attachments/assets/8596825a-107b-4887-ab19-9bd5d94748f4" />
+
 
 ---
 
