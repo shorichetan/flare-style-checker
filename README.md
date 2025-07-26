@@ -19,7 +19,7 @@
 
 ## GUI Preview
 
-> (Add a screenshot or GIF of the tool in action)
+> <img width="865" height="516" alt="image" src="https://github.com/user-attachments/assets/e96f931d-325b-478a-ada6-2ad7cda038eb" />
 
 ---
 
